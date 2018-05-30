@@ -2,17 +2,69 @@
 
 # author: Lorenzo Milesi <maxxer@yetopen.it>
 # GPLv3 license
+# contributions: Jernej Jakob <jernej.jakob@gmail.com>
 
 AGREE_TOS=""
-NO_NGINX="no"
-RENEW_ONLY="no"
-NEW_CERT="no"
+NO_NGINX=false
+DEPLOY_ONLY=false
 WEBROOT="/opt/zimbra/data/nginx/html"
 SERVICES=all
-PATCH_ONLY="no"
-RESTART_ZIMBRA="yes"
+PATCH_ONLY=false
+RESTART_ZIMBRA=true
 
 ## patches
+# for "Release 8.8.8.GA.2009.UBUNTU16.64 UBUNTU16_64 FOSS edition, Patch 8.8.8_P2." as reported by zmcontrol -v.
+read -r -d '' PATCH_Z88 <<'EOF'
+diff -Naur templates.20180530_213444/nginx.conf.web.http.default.template templates/nginx.conf.web.http.default.template
+--- templates.20180530_213444/nginx.conf.web.http.default.template      2018-05-30 21:34:50.754994945 +0200
++++ templates/nginx.conf.web.http.default.template      2018-05-30 21:44:31.456043263 +0200
+@@ -406,4 +406,8 @@
+         # for custom error pages, internal use only
+         internal;
+     }
++
++    location ^~ /.well-known/acme-challenge {
++        root /opt/zimbra/data/nginx/html;
++    }
+ }
+diff -Naur templates.20180530_213444/nginx.conf.web.https.default.template templates/nginx.conf.web.https.default.template
+--- templates.20180530_213444/nginx.conf.web.https.default.template     2018-05-30 21:34:50.822997410 +0200
++++ templates/nginx.conf.web.https.default.template     2018-05-30 21:45:04.701248131 +0200
+@@ -510,4 +510,8 @@
+         # for custom error pages, internal use only
+         internal;
+     }
++
++    location ^~ /.well-known/acme-challenge {
++        root /opt/zimbra/data/nginx/html;
++    }
+ }
+diff -Naur templates.20180530_213444/nginx.conf.web.http.template templates/nginx.conf.web.http.template
+--- templates.20180530_213444/nginx.conf.web.http.template      2018-05-30 21:34:50.826997555 +0200
++++ templates/nginx.conf.web.http.template      2018-05-30 21:45:48.206824832 +0200
+@@ -407,5 +407,9 @@
+         # for custom error pages, internal use only
+         internal;
+     }
++
++    location ^~ /.well-known/acme-challenge {
++        root /opt/zimbra/data/nginx/html;
++    }
+ }
+diff -Naur templates.20180530_213444/nginx.conf.web.https.template templates/nginx.conf.web.https.template
+--- templates.20180530_213444/nginx.conf.web.https.template     2018-05-30 21:34:50.830997700 +0200
++++ templates/nginx.conf.web.https.template     2018-05-30 21:45:59.735242633 +0200
+@@ -481,5 +481,9 @@
+         # for custom error pages, internal use only
+         internal;
+     }
++
++    location ^~ /.well-known/acme-challenge {
++        root /opt/zimbra/data/nginx/html;
++    }
+ }
+EOF
+
 read -r -d '' PATCH_Z87 <<'EOF'
 diff -Naur templates_orig/nginx.conf.web.http.default.template templates/nginx.conf.web.http.default.template
 --- templates_orig/nginx.conf.web.http.default.template	2017-10-01 20:30:23.022776735 +0200
@@ -134,7 +186,7 @@ function check_executable() {
 function version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
 
 function bootstrap() {
-    echo "Certbot-Zimbra v0.2 - https://github.com/YetOpen/certbot-zimbra"
+    echo "Certbot-Zimbra v0.3 - https://github.com/jjakob/certbot-zimbra"
 
 	if [ ! -x "/opt/zimbra/bin/zmcontrol" ]; then
 		echo "/opt/zimbra/bin/zmcontrol not found"
@@ -148,8 +200,19 @@ function bootstrap() {
 	echo "Detected Zimbra $DETECTED_ZIMBRA_VERSION"
 	check_executable
 
+	ZMHOSTNAME=$(su - zimbra -c '/opt/zimbra/bin/zmhostname')
+
+	# If we got no domain from command line try using zimbra hostname
+	# FIXME the prompt should be avoided in cron!
+	if [ -z "$DOMAIN" ]; then
+		DOMAIN=$ZMHOSTNAME
+		echo "Using $ZMHOSTNAME ('zmhostname') as domain for certificate."
+	fi
+
+	CERTPATH="/etc/letsencrypt/live/$DOMAIN"
+
 	# zimbraReverseProxyMailMode
-	ZMODE=$(/opt/zimbra/bin/zmprov gs $(/opt/zimbra/bin/zmhostname) zimbraReverseProxyMailMode | grep Mode | cut -f 2 -d " ")
+	ZMODE=$(/opt/zimbra/bin/zmprov gs $DOMAIN zimbraReverseProxyMailMode | grep Mode | cut -f 2 -d " ")
 
 	if version_gt $DETECTED_ZIMBRA_VERSION 8.7; then
 		NGINX_BIN="/opt/zimbra/common/sbin/nginx"
@@ -160,14 +223,10 @@ function bootstrap() {
 
 # Patch nginx, and check if it's installed
 function patch_nginx() {
-	if [ "$NO_NGINX" == "yes" ]; then
-		return
-	fi
-
 	# check if nginx is installed
 	if [ ! -x $NGINX_BIN ]; then
 		echo "zimbra-proxy package not present"
-		exit 1;
+		exit 1
 	fi
 
 	grep -q 'acme-challenge' /opt/zimbra/conf/nginx/includes/nginx.conf.web.http.default
@@ -180,7 +239,7 @@ function patch_nginx() {
 	PATCH_BIN=$(which patch)
 	if [ -z "$PATCH_BIN" ]; then
 		echo "No patch binary found. Please install OS 'patch' package";
-		exit 1;
+		exit 1
 	fi
 
 	# Let's make a backup of zimbra's original templates
@@ -189,7 +248,9 @@ function patch_nginx() {
 	cp -r /opt/zimbra/conf/nginx/templates /opt/zimbra/conf/nginx/templates.$BKDATE
 
 	# Simulate patching
-	if version_gt $DETECTED_ZIMBRA_VERSION 8.7; then
+	if version_gt $DETECTED_ZIMBRA_VERSION 8.8; then
+		echo "$PATCH_Z88" | $PATCH_BIN --dry-run -l -p1 -d /opt/zimbra/conf/nginx/templates/
+	elif version_gt $DETECTED_ZIMBRA_VERSION 8.7; then
 		echo "$PATCH_Z87" | $PATCH_BIN --dry-run -l -p1 -d /opt/zimbra/conf/nginx/templates/
 	elif version_gt $DETECTED_ZIMBRA_VERSION 8.6; then
 		echo "$PATCH_Z86" | $PATCH_BIN --dry-run -l -p1 -d /opt/zimbra/conf/nginx/templates/
@@ -203,7 +264,9 @@ function patch_nginx() {
 	fi
 
 	# DO patch
-	if version_gt $DETECTED_ZIMBRA_VERSION 8.7; then
+	if version_gt $DETECTED_ZIMBRA_VERSION 8.8; then
+                echo "$PATCH_Z88" | $PATCH_BIN -l -p1 -d /opt/zimbra/conf/nginx/templates/
+	elif version_gt $DETECTED_ZIMBRA_VERSION 8.7; then
 		echo "$PATCH_Z87" | $PATCH_BIN -l -p1 -d /opt/zimbra/conf/nginx/templates/
 	elif version_gt $DETECTED_ZIMBRA_VERSION 8.6; then
 		echo "$PATCH_Z86" | $PATCH_BIN -l -p1 -d /opt/zimbra/conf/nginx/templates/
@@ -213,49 +276,33 @@ function patch_nginx() {
 		# Restore the backups
 		cp /opt/zimbra/conf/nginx/templates.$BKDATE/* /opt/zimbra/conf/nginx/templates/
 		echo "The original templates has been restored from /opt/zimbra/conf/nginx/templates.$BKDATE"
-		exit 1;
+		exit 1
 	fi
 
 	# reload nginx config
 	su - zimbra -c 'zmproxyctl restart'
 	if [ $? -ne 0 ]; then
 		echo "Something went wrong while restarting zimbra proxy component. Please file a bug with the output above to https://github.com/YetOpen/certbot-zimbra/issues/new"
-		exit 1;
+		exit 1
 	fi
 }
 
 # perform the letsencrypt request and prepares the certs
 function request_certificate() {
-	# If we got no domain from command line try using zimbra hostname
-	# FIXME the prompt should be avoided in cron!
-	if [ -z "$DOMAIN" ]; then
-		ZMHOSTNAME=$(/opt/zimbra/bin/zmhostname)
-		while true; do
-			read -p "Detected $ZMHOSTNAME as Zimbra domain: use this hostname for certificate request? " yn
-		    	case $yn in
-				[Yy]* ) DOMAIN=$ZMHOSTNAME; break;;
-				[Nn]* ) echo "Please call $(basename $0) --hostname your.host.name"; exit;;
-				* ) echo "Please answer yes or no.";;
-		    	esac
-		done
-	fi
-
-	if [ "$RENEW_ONLY" == "yes" ]; then
-		return
-	fi
 
 	# <8.7 didn't have nginx webroot
 	if [ ! -d "$WEBROOT" ]; then
 		mkdir -p $WEBROOT
-		chown -R zimbra:zimbra $WEBROOT
+		# owned by root on 8.8.8 by default
+		#chown -R zimbra:zimbra $WEBROOT
 	fi
 
 	# Request our cert
-    # If Zimbra is in https only we can use port 80 for ourselves, otherwise go through nginx
-	$LEB_BIN certonly $AGREE_TOS -a webroot -w $WEBROOT -d $DOMAIN
-	if [ $? -ne 0 ] ; then
-		echo "letsencrypt returned an error";
-		exit 1;
+	$LEB_BIN certonly $AGREE_TOS --webroot --webroot-path $WEBROOT -d $DOMAIN
+	e=$?
+	if [ $e -ne 0 ] ; then
+		echo "$LEB_BIN returned an error: $e"
+		exit 1
 	fi
 }
 
@@ -267,9 +314,8 @@ function prepare_certificate () {
 	chown -R zimbra:zimbra /opt/zimbra/ssl/letsencrypt/
 
 	# Now we should have the chain. Let's create the "patched" chain suitable for Zimbra
-	cat $CERTPATH/chain.pem > /opt/zimbra/ssl/letsencrypt/zimbra_chain.pem
 	# The cert below comes from https://www.identrust.com/certificates/trustid/root-download-x3.html. It should be better to let the user fetch it?
-	cat << EOF >> /opt/zimbra/ssl/letsencrypt/zimbra_chain.pem
+	cat /opt/zimbra/ssl/letsencrypt/chain.pem - << 'EOF' >> /opt/zimbra/ssl/letsencrypt/zimbra_chain.pem
 -----BEGIN CERTIFICATE-----
 MIIDSjCCAjKgAwIBAgIQRK+wgNajJ7qJMDmGLvhAazANBgkqhkiG9w0BAQUFADA/
 MSQwIgYDVQQKExtEaWdpdGFsIFNpZ25hdHVyZSBUcnVzdCBDby4xFzAVBgNVBAMT
@@ -298,8 +344,10 @@ EOF
 	else
 		/opt/zimbra/bin/zmcertmgr verifycrt comm /opt/zimbra/ssl/letsencrypt/privkey.pem /opt/zimbra/ssl/letsencrypt/cert.pem /opt/zimbra/ssl/letsencrypt/zimbra_chain.pem
 	fi
-	if [ $? -eq 1 ]; then
+	e=$?
+	if [ $e -eq 1 ]; then
 		echo "Unable to verify cert!"
+		echo "zmcertmgr verifycrt exit status $e"
 		exit 1;
 	fi
 
@@ -308,7 +356,7 @@ EOF
 # deploys certificate and restarts zimbra. ASSUMES prepare_certificate has been called already
 function deploy_certificate() {
 	# Backup old stuff
-	cp -a /opt/zimbra/ssl/zimbra /opt/zimbra/ssl/zimbra.$(date "+%Y%.m%.d-%H.%M")
+	cp -a /opt/zimbra/ssl/zimbra /opt/zimbra/ssl/zimbra.$(date "+%Y%m%d-%H%M")
 
 	cp /opt/zimbra/ssl/letsencrypt/privkey.pem /opt/zimbra/ssl/zimbra/commercial/commercial.key
 	if version_gt $DETECTED_ZIMBRA_VERSION 8.7; then
@@ -316,14 +364,26 @@ function deploy_certificate() {
 	else
 		/opt/zimbra/bin/zmcertmgr deploycrt comm /opt/zimbra/ssl/letsencrypt/cert.pem /opt/zimbra/ssl/letsencrypt/zimbra_chain.pem
 	fi
+	e=$?
+	if [ $e -ne 0 ]; then
+		echo "Deploying certificates failed!"
+		echo "zmcertmgr deploycrt exit status $e"
+		exit 1
+	fi
 
 	# Set ownership of nginx config template
+	# FIXME: not needed?
         chown zimbra:zimbra /opt/zimbra/conf/nginx/includes/nginx.conf.web.http.default
 
 	# Finally apply cert!
-	[[ "${RESTART_ZIMBRA}" == "yes" ]] && su - zimbra -c 'zmcontrol restart'
-	# FIXME And hope that everything started fine! :)
-
+	if $RESTART_ZIMBRA; then
+		su - zimbra -c 'zmcontrol restart'
+		e=$?
+	        if [ $e -ne 0 ]; then
+			echo "Restarting zimbra failed!"
+			echo "zmcontrol restart exit status $e"
+		fi
+	fi
 }
 
 function check_user () {
@@ -335,22 +395,37 @@ fi
 
 function usage () {
 	cat <<EOF
-USAGE: $(basename $0) < -n | -r | -p > [-d my.host.name] [-x] [-w /var/www]
-  Options:
-	 -n | --new: performs a request for a new certificate
-	 -r | --renew: deploys certificate, assuming it has just been renewed
-	 -p | --patch-only: does only nginx patching. Useful to be called before renew, in case nginx templates have been overwritten by an upgrade
+USAGE: $(basename $0) [OPTION]...
+Options modifying behaviour:
+	-d | --deploy-only: only deploy certificates, does not run letsencrypt or patch nginx
+	-p | --patch-only: only patch nginx template files (useful in case they've been overwritten by an upgrade)
+	-x | --no-nginx: don't check and patch zimbra's nginx
+Misc:
+        -a | --agree-tos: agree with the Terms of Service of Let's Encrypt
+	-h | --hostname <hostname.foo>: hostname being requested. Default: output of 'zmhostname'
+	-w | --webroot </path/to/webroot>: if there's a webserver other than zimbra's nginx (zimbra-proxy) on port 80, specify its webroot
+	-s | --services <service_names>: the set of services to be used for a certificate,
+	       	valid services are 'all' or any of: ldap,mailboxd,mta,proxy (see zmcertmgr help deploycrt)
+	       	Default: 'all'
+	-z | --no-zimbra-restart: do not restart zimbra after a certificate deployment
 
-	Optional arguments:
-	 -d | --hostname: hostname being requested. If not passed uses \`zmhostname\`
-	 -x | --no-nginx: doesn't check and patch zimbra's nginx. Assumes some other webserver is listening on port 80
-	 -w | --webroot: if there's another webserver on port 80 specify its webroot
-	 -a | --agree-tos: agree with the Terms of Service of Let's Encrypt
-	 -s | --services <service_names>: the set of services to be used for a certificate. Valid services are 'all' or any of: ldap,mailboxd,mta,proxy. Default: 'all'
-	 -z | --no-zimbra-restart: do not restart zimbra after a certificate deployment
+The default, when called without any behaviour-modifying options, is to:
+- patch the nginx templates (for letsencrypt)
+- request certificates (either fetch new ones or renew existing ones),
+- deploy them into Zimbra
+and finally
+- do a Zimbra restart (to apply the deployed certificates).
+
+It's invalid to use --patch-only in combination with --deploy-only or --no-nginx.
+
+Do not put this script into your crontab. It will deploy the old certificates and restart zimbra even if they are not due for renewal.
+Use certbot's pre/post/deploy-hooks for that.
+
+If an error is encountered in any step of the process, the script prints a summary of the error and exits with a non-zero exit status.
 
 Author: Lorenzo Milesi <maxxer@yetopen.it>
-Feedback, bugs and PR are welcome on GitHub: https://github.com/yetopen/certbot-zimbra.
+Contributor: Jernej Jakob <jernej.jakob@gmail.com>
+Feedback, bugs and PR are welcome on GitHub: https://github.com/jjakob/certbot-zimbra.
 
 Disclaimer:
 THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM “AS IS” WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU. SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
@@ -364,70 +439,64 @@ while [[ $# -gt 0 ]]; do
 	key="$1"
 
 	case $key in
-	    -d|--hostname)
-	    DOMAIN="$2"
-	    shift # past argument
-	    ;;
-	    -x|--no-nginx)
-	    NO_NGINX="yes"
-	    ;;
-	    -p|--patch-only)
-	    PATCH_ONLY="yes"
-	    ;;
-			-n|--new)
-	  	NEW_CERT="yes"
-	    ;;
-			-r|--renew)
-	  	RENEW_ONLY="yes"
-	    ;;
-			-w|--webroot)
-	  	WEBROOT="$2"
+		-h|--hostname)
+			DOMAIN="$2"
+			shift # past argument
+			;;
+		-x|--no-nginx)
+			NO_NGINX=true
+			;;
+		-p|--patch-only)
+			PATCH_ONLY=true
+			;;
+		-d|--deploy-only)
+			DEPLOY_ONLY=true
+			;;
+		-w|--webroot)
+			WEBROOT="$2"
 			shift
-	    ;;
-			-a|--agree-tos)
-	  	AGREE_TOS="--text --agree-tos --non-interactive"
-      ;;
-			-s|--services)
-	  	SERVICES="$2"
+			;;
+		-a|--agree-tos)
+			AGREE_TOS="--text --agree-tos --non-interactive"
+			;;
+		-s|--services)
+			SERVICES="$2"
 			shift
-	    ;;
-			-z|--no-zimbra-restart)
-	  	RESTART_ZIMBRA="no"
-	    ;;
-	    *)
-	  	# unknown option
+			;;
+		-z|--no-zimbra-restart)
+			RESTART_ZIMBRA=false
+			;;
+		--help)
 			usage
 			exit 0
-	    ;;
+			;;
+		*)
+			# unknown option
+			echo "Unknown option: $key" >& 2
+			echo "Try '$(basename $0) --help' for help."
+			exit 1
+			;;
 	esac
 	shift # past argument or value
 done
 
-if [ "$NEW_CERT" == "no" ] && [ "$RENEW_ONLY" == "no" ] && [ "$PATCH_ONLY" == "no" ]; then
+if $DEPLOY_ONLY && $PATCH_ONLY; then
 	usage
-	exit 0
+	exit 1
 fi
 
-if [ "$PATCH_ONLY" == "yes" ] && [ "$NO_NGINX" == "yes" ]; then
-	echo "Incompatible nginx parameters"
-	exit 0
+if $PATCH_ONLY && ( $NO_NGINX || $DEPLOY_ONLY ); then
+	usage
+	exit 1
 fi
-
-# If passed by --renew-hook, contains the path of the renewed cert which may differ from the default /etc/letsencrypt/live/$DOMAIN
-#CERTPATH=$RENEWED_LINEAGE
-#if [ -z "$CERTPATH" ]; then
-CERTPATH="/etc/letsencrypt/live/$DOMAIN"
-#fi
 
 # actions
-bootstrap
 check_user
-patch_nginx
-if [ "$PATCH_ONLY" == "yes" ]; then
-    exit 0;
-fi
-request_certificate
+bootstrap
+$NO_NGINX || $DEPLOY_ONLY || patch_nginx
+$PATCH_ONLY && exit 0
+$DEPLOY_ONLY || request_certificate
 prepare_certificate
 deploy_certificate
 
-exit 0;
+exit 0
