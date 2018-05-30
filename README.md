@@ -5,7 +5,9 @@ The script tweaks zimbra's nginx config to allow access of *.well-known* webserv
 
 Letsencrypt by default tries to verify a domain using https, so the script should work fine if [*zimbraReverseProxyMailMode*](https://wiki.zimbra.com/wiki/Enabling_Zimbra_Proxy_and_memcached#Protocol_Requirements_Including_HTTPS_Redirect)s is set to *both* or *https*. May not work for *http* only.
 
-This is still a BETA script. Tested on:
+This is an ALPHA script, UNTESTED. The basic idea should work, but errors or typos are possible and it may not complete successfully, leaving your system in a unknown state.
+
+The previous version was tested on:
 * 8.7.11_UBUNTU16
 * 8.7.11_RHEL7
 * 8.6_RHEL7
@@ -20,7 +22,7 @@ This is still a BETA script. Tested on:
 
 The preferred way is to install it is by using the wizard [at certbot's home](https://certbot.eff.org/). Choose *None of the above* as software and your operating system. This will allow you to install easily upgradable system packages.
 
-By installing Certbot via packages it automatically creates a cron schedule to renew certificates. We must **disable this schedule** because after the renew we must deploy it in Zimbra. So open `/etc/cron.d/certbot` with your favourite editor and **comment the last line**.
+Installing Certbot via the system's package mananger will automatically create a cron schedule to renew certificates. We must **disable this schedule** because after the renew we must deploy it in Zimbra. So open `/etc/cron.d/certbot` with your favourite editor and **comment the last line**.
 
 # Limitations
 
@@ -31,22 +33,23 @@ By installing Certbot via packages it automatically creates a cron schedule to r
 ## Zimbra 8.7 single server
 
 Run
-`./certbot_zimbra.sh -n`
+`./certbot_zimbra.sh`
 it should do everything by itself, including **restarting zimbra**.
 
 ## Renewal
 
-EFF suggest to run *renew* twice a day. Since this would imply restarting zimbra, once a day outside workhours should be fine. So in your favourite place (like `/etc/cron.d/zimbracrontab`) schedule the commands below, as suitable for your setup:
+EFF suggest to run *renew* twice a day. Since this would imply restarting zimbra, once a day outside workhours should be fine. So in your favourite place (`crontab -u root -e`, `/etc/cron.d/zimbracrontab`...) schedule the commands below, as suitable for your setup:
 
 ```
-12 5 * * * root /usr/bin/certbot renew --pre-hook "/usr/local/bin/certbot_zimbra.sh -p" --renew-hook "/usr/local/bin/certbot_zimbra.sh -r -d $(/opt/zimbra/bin/zmhostname)"
+12 5 * * * root /usr/bin/certbot renew --pre-hook "/usr/local/bin/certbot_zimbra.sh -p" --renew-hook "/usr/local/bin/certbot_zimbra.sh -d"
 ```
+This will run the `--renew-hook` only if a renewal was actually carried out, in order to deploy the renewed certificates and restart Zimbra.
+
 The `--pre-hook` ensures Zimbra's nginx is patched to allow certificate verification. You can omit it if you remember to manually execute that command after an upgrade or
 a reinstall which may restore nginx's templates to their default.
 
 The `--renew-hook` parameter has been added since certbot 0.7.0, so check your version before using it. If it's not supported you should get a workaround, but probably the easiest way is to upgrade it.
 
-The `-d` option is required in order to avoid domain confirmation prompt by the script.
 
 ## Renewal using Systemd
 The example below uses the renew-hook which will only rerun the script if a renewal was successfull and thus only reloading zimbra when needed.
@@ -61,7 +64,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 # check for renewal, only start/stop nginx if certs need to be renewed
-ExecStart=/usr/bin/certbot renew --quiet --agree-tos --pre-hook "/usr/local/bin/certbot_zimbra.sh -p" --renew-hook "/usr/local/bin/certbot_zimbra.sh -r -d $(/opt/zimbra/bin/zmhostname)"
+ExecStart=/usr/bin/certbot renew --quiet --agree-tos -n --pre-hook "/usr/local/bin/certbot_zimbra.sh -p" --renew-hook "/usr/local/bin/certbot_zimbra.sh -d"
 ```
 
 Create a timer file to run the above once a day at 2am: /etc/systemd/system/renew-letsencrypt.timer
@@ -100,7 +103,7 @@ systemctl list-timers renew-letsencrypt.timer
 
 Say you have apache in front of zimbra (or listening on port 80 only) just run `certbot-auto` to request the certificate for apache, and when done run
 ```
-/usr/local/bin/certbot_zimbra.sh --renew --no-nginx
+/usr/local/bin/certbot_zimbra.sh --deploy --no-nginx
 ```
 so that it will deploy the certificate in zimbra without patching nginx.
 
@@ -123,8 +126,13 @@ See [LICENSE](LICENSE).
 
 THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM “AS IS” WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU. SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
 
-# Author
+### Original Author
 
 &copy; Lorenzo Milesi <maxxer@yetopen.it>
 
-Feedback, bugs, PR are welcome on [GitHub](https://github.com/yetopen/certbot-zimbra).
+Forked from: [yetopen/certbot-zimbra](https://github.com/yetopen/certbot-zimbra).
+
+### Contributions
+
+&copy; 2018 Jernej Jakob <jernej.jakob@gmail.com>
+
