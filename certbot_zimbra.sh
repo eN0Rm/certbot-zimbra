@@ -7,10 +7,12 @@
 AGREE_TOS=""
 NO_NGINX=false
 DEPLOY_ONLY=false
-WEBROOT="/opt/zimbra/data/nginx/html"
-SERVICES=all
 PATCH_ONLY=false
 RESTART_ZIMBRA=true
+SERVICES="all"
+WEBROOT="/opt/zimbra/data/nginx/html"
+GITHUB_URL="https://github.com/jjakob/certbot-zimbra"
+VERSION="v0.3"
 
 ## patches
 # for "Release 8.8.8.GA.2009.UBUNTU16.64 UBUNTU16_64 FOSS edition, Patch 8.8.8_P2." as reported by zmcontrol -v.
@@ -186,7 +188,7 @@ function check_executable() {
 function version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
 
 function bootstrap() {
-    echo "Certbot-Zimbra v0.3 - https://github.com/jjakob/certbot-zimbra"
+    echo "Certbot-Zimbra $VERSION - $GITHUB_URL"
 
 	if [ ! -x "/opt/zimbra/bin/zmcontrol" ]; then
 		echo "/opt/zimbra/bin/zmcontrol not found"
@@ -259,7 +261,7 @@ function patch_nginx() {
 		exit 1;
 	fi
 	if [ $? -ne 0 ]; then
-		echo "Patching test failed! Please file a bug with the output above to https://github.com/YetOpen/certbot-zimbra/issues/new"
+		echo "Patching test failed! Please see $GITHUB_URL/issues if this issue has already been reported or file a new one including the output above."
 		exit 1;
 	fi
 
@@ -272,7 +274,7 @@ function patch_nginx() {
 		echo "$PATCH_Z86" | $PATCH_BIN -l -p1 -d /opt/zimbra/conf/nginx/templates/
 	fi
 	if [ $? -ne 0 ]; then
-		echo "Patching zimbra's nginx failed! File a bug with the output above to https://github.com/YetOpen/certbot-zimbra/issues/new"
+		echo "Patching zimbra's nginx failed! Please see $GITHUB_URL/issues if this issue has already been reported or file a new one including the output above."
 		# Restore the backups
 		cp /opt/zimbra/conf/nginx/templates.$BKDATE/* /opt/zimbra/conf/nginx/templates/
 		echo "The original templates has been restored from /opt/zimbra/conf/nginx/templates.$BKDATE"
@@ -282,7 +284,7 @@ function patch_nginx() {
 	# reload nginx config
 	su - zimbra -c 'zmproxyctl restart'
 	if [ $? -ne 0 ]; then
-		echo "Something went wrong while restarting zimbra proxy component. Please file a bug with the output above to https://github.com/YetOpen/certbot-zimbra/issues/new"
+		echo "Something went wrong while restarting zimbra proxy component. Please see $GITHUB_URL/issues if this issue has already been reported or file a new one including the output above."
 		exit 1
 	fi
 }
@@ -425,7 +427,7 @@ If an error is encountered in any step of the process, the script prints a summa
 
 Author: Lorenzo Milesi <maxxer@yetopen.it>
 Contributor: Jernej Jakob <jernej.jakob@gmail.com>
-Feedback, bugs and PR are welcome on GitHub: https://github.com/jjakob/certbot-zimbra.
+Feedback, bugs and PR are welcome on GitHub: $GITHUB_URL
 
 Disclaimer:
 THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM “AS IS” WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU. SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
