@@ -390,9 +390,9 @@ function deploy_certificate() {
 
 function check_user () {
 	if [ "$EUID" -ne 0 ]; then
-   echo "This script must be run as root" 1>&2
-   exit 1
-fi
+		echo "This script must be run as root" 1>&2
+		exit 1
+	fi
 }
 
 function usage () {
@@ -420,8 +420,8 @@ and finally
 
 It's invalid to use --patch-only in combination with --deploy-only or --no-nginx.
 
-Do not put this script into your crontab. It will deploy the old certificates and restart zimbra even if they are not due for renewal.
-Use certbot's pre/post/deploy-hooks for that.
+Do not put this script with default options into your crontab. It will go through the whole process of deploying the old certificates and restarting Zimbra even if none of the certificates are renewed.
+For automated renewal, use certbot's pre/post/deploy-hooks, see $GITHUB_URL/blob/master/README.md#renewal .
 
 If an error is encountered in any step of the process, the script prints a summary of the error and exits with a non-zero exit status.
 
