@@ -267,7 +267,11 @@ function patch_nginx() {
 
 	# DO patch
 	if version_gt $DETECTED_ZIMBRA_VERSION 8.8; then
-                echo "$PATCH_Z88" | $PATCH_BIN -l -p1 -d /opt/zimbra/conf/nginx/templates/
+                #echo "$PATCH_Z88" | $PATCH_BIN -l -p1 -d /opt/zimbra/conf/nginx/templates/
+		sed  -i.backup 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.default.template
+		sed  -i.backup 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.default.template
+		sed  -i.backup 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.template
+		sed  -i.backup 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.template
 	elif version_gt $DETECTED_ZIMBRA_VERSION 8.7; then
 		echo "$PATCH_Z87" | $PATCH_BIN -l -p1 -d /opt/zimbra/conf/nginx/templates/
 	elif version_gt $DETECTED_ZIMBRA_VERSION 8.6; then
