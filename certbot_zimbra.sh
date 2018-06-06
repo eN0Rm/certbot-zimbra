@@ -13,6 +13,7 @@ SERVICES="all"
 WEBROOT="/opt/zimbra/data/nginx/html"
 GITHUB_URL="https://github.com/jjakob/certbot-zimbra"
 VERSION="v0.3"
+TIMESTAMP=$(date '+%Y-%m-%d-%H:%M:%S')
 
 ## patches
 # for "Release 8.8.8.GA.2009.UBUNTU16.64 UBUNTU16_64 FOSS edition, Patch 8.8.8_P2." as reported by zmcontrol -v.
@@ -251,7 +252,12 @@ function patch_nginx() {
 
 	# Simulate patching
 	if version_gt $DETECTED_ZIMBRA_VERSION 8.8; then
-		echo "$PATCH_Z88" | $PATCH_BIN --dry-run -l -p1 -d /opt/zimbra/conf/nginx/templates/
+		#echo "$PATCH_Z88" | $PATCH_BIN --dry-run -l -p1 -d /opt/zimbra/conf/nginx/templates/
+		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.default.template
+		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.default.template
+		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.template
+		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.template
+
 	elif version_gt $DETECTED_ZIMBRA_VERSION 8.7; then
 		echo "$PATCH_Z87" | $PATCH_BIN --dry-run -l -p1 -d /opt/zimbra/conf/nginx/templates/
 	elif version_gt $DETECTED_ZIMBRA_VERSION 8.6; then
@@ -268,10 +274,10 @@ function patch_nginx() {
 	# DO patch
 	if version_gt $DETECTED_ZIMBRA_VERSION 8.8; then
                 #echo "$PATCH_Z88" | $PATCH_BIN -l -p1 -d /opt/zimbra/conf/nginx/templates/
-		sed  -i.backup 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.default.template
-		sed  -i.backup 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.default.template
-		sed  -i.backup 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.template
-		sed  -i.backup 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.template
+		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.default.template
+		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.default.template
+		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.template
+		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.template
 	elif version_gt $DETECTED_ZIMBRA_VERSION 8.7; then
 		echo "$PATCH_Z87" | $PATCH_BIN -l -p1 -d /opt/zimbra/conf/nginx/templates/
 	elif version_gt $DETECTED_ZIMBRA_VERSION 8.6; then
