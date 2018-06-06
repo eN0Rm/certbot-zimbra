@@ -252,11 +252,12 @@ function patch_nginx() {
 
 	# Simulate patching
 	if version_gt $DETECTED_ZIMBRA_VERSION 8.8; then
+		echo "Skipping patch simulation"
 		#echo "$PATCH_Z88" | $PATCH_BIN --dry-run -l -p1 -d /opt/zimbra/conf/nginx/templates/
-		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.default.template
-		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.default.template
-		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.template
-		sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.template
+		#sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.default.template
+		#sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.default.template
+		#sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.http.template
+		#sed  -i.$TIMESTAMP 's/^}/\n\    location \^\~ \/.well-known\/acme-challenge { \n\         root \/opt\/zimbra\/data\/nginx\/html;\n\    }\n}/' /opt/zimbra/conf/nginx/templates/nginx.conf.web.https.template
 
 	elif version_gt $DETECTED_ZIMBRA_VERSION 8.7; then
 		echo "$PATCH_Z87" | $PATCH_BIN --dry-run -l -p1 -d /opt/zimbra/conf/nginx/templates/
